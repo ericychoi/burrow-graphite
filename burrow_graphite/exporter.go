@@ -3,48 +3,49 @@ package burrow_graphite
 import (
 	"context"
 
+	"strconv"
 	"sync"
 	"time"
-	"strconv"
 
-  log "github.com/Sirupsen/logrus"
+	log "github.com/Sirupsen/logrus"
 	"github.com/marpaia/graphite-golang"
 )
 
 type BurrowExporter struct {
-	client            *BurrowClient
-	graphiteHost      string
-	graphitePort      int
-	interval          int
-	wg                sync.WaitGroup
+	client       *BurrowClient
+	graphiteHost string
+	graphitePort int
+	interval     int
+	prefix       string
+	wg           sync.WaitGroup
 }
 
 func (be *BurrowExporter) processGroup(cluster, group string, gh *graphite.Graphite) {
 	lag, err := be.client.ConsumerGroupLag(cluster, group)
 	if err != nil {
 		log.WithFields(log.Fields{
-			"err": err,
+			"err":   err,
 			"group": group,
 		}).Error("error getting lag for consumer group. returning.")
 		return
 	}
-  metrics := make([]graphite.Metric)
-
+	var metrics []graphite.Metric
+	ts := time.Now().Unix()
 	for _, partition := range lag.Status.Partitions {
-	  metricNamePrefix := "kafka" + "." + lag.Status.Cluster + "." + "group" + "." + lag.Status.Group + "." + "topic" + "." + partition.Topic + "." + strconv.Itoa(int(partition.Partition))
-	  metrics = append(metrics, graphite.NewMetric(metricNamePrefix + "." + "Lag", strconv.Itoa(int(partition.End.Lag)), time.Now().Unix()))
-	  metrics = append(metrics, graphite.NewMetric(metricNamePrefix + "." + "Offset", strconv.Itoa(int(partition.End.Offset)), time.Now().Unix()))
+		metricNamePrefix := be.prefix + "kafka" + "." + lag.Status.Cluster + "." + "group" + "." + lag.Status.Group + "." + "topic" + "." + partition.Topic + "." + strconv.Itoa(int(partition.Partition))
+		metrics = append(metrics, graphite.NewMetric(metricNamePrefix+"."+"Lag", strconv.Itoa(int(partition.End.Lag)), ts))
+		metrics = append(metrics, graphite.NewMetric(metricNamePrefix+"."+"Offset", strconv.Itoa(int(partition.End.Offset)), ts))
 	}
 
-  totalLagMetricName := "kafka" + "." + lag.Status.Cluster + "." + "group" + "." + lag.Status.Group + "." + "TotalLag"
-  metrics = append(metrics, graphite.NewMetric(totalLagMetricName, strconv.Itoa(int(lag.Status.TotalLag))))
-  SendMetrics(gh, metrics)
-  if err != nil {
-      log.WithFields(log.Fields{
-        "err": err,
-      }).Error("Error in sending metrics to Graphite. returning.")
-      return
-  }
+	totalLagMetricName := be.prefix + "kafka" + "." + lag.Status.Cluster + "." + "group" + "." + lag.Status.Group + "." + "TotalLag"
+	metrics = append(metrics, graphite.NewMetric(totalLagMetricName, strconv.Itoa(int(lag.Status.TotalLag)), ts))
+	SendMetrics(gh, metrics)
+	if err != nil {
+		log.WithFields(log.Fields{
+			"err": err,
+		}).Error("Error in sending metrics to Graphite. returning.")
+		return
+	}
 }
 
 func (be *BurrowExporter) processTopic(cluster, topic string, gh *graphite.Graphite) {
@@ -58,14 +59,14 @@ func (be *BurrowExporter) processTopic(cluster, topic string, gh *graphite.Graph
 	}
 
 	for i, offset := range details.Offsets {
-    metricName := "kafka" + "." + cluster + "." + "topic" + "." + topic + "." + strconv.Itoa(i) + "." + "offset"
-    err := gh.SimpleSend(metricName, strconv.Itoa(int(offset)))
-    if err != nil {
-        log.WithFields(log.Fields{
-          "err": err,
-        }).Error("Error in sending metrics to Graphite. returning.")
-        return
-    }
+		metricName := be.prefix + "kafka" + "." + cluster + "." + "topic" + "." + topic + "." + strconv.Itoa(i) + "." + "offset"
+		err := gh.SimpleSend(metricName, strconv.Itoa(int(offset)))
+		if err != nil {
+			log.WithFields(log.Fields{
+				"err": err,
+			}).Error("Error in sending metrics to Graphite. returning.")
+			return
+		}
 	}
 }
 
@@ -128,7 +129,7 @@ func (be *BurrowExporter) scrape() {
 
 	log.Info("Getting connection to the Graphite server")
 	gh, err := GetGraphiteConnection(be.graphiteHost, be.graphitePort)
-  if err != nil {
+	if err != nil {
 		log.WithFields(log.Fields{
 			"err": err,
 		}).Error("error Connnecting to Graphite server. Continuing.")
@@ -156,16 +157,16 @@ func (be *BurrowExporter) scrape() {
 
 	wg.Wait()
 
-  log.Info("Sleeping for 5 secs to ensure that metrics are sent to Graphite...")
-  time.Sleep(5 * time.Second)
-  log.Info("Closing the connection to the Graphite server")
+	log.Info("Sleeping for 5 secs to ensure that metrics are sent to Graphite...")
+	time.Sleep(5 * time.Second)
+	log.Info("Closing the connection to the Graphite server")
 	err = CloseGraphiteConnection(gh)
 	if err != nil {
-  		log.WithFields(log.Fields{
-  			"err": err,
-  		}).Error("error Closing the connection to Graphite server. Continuing.")
-  		return
-  }
+		log.WithFields(log.Fields{
+			"err": err,
+		}).Error("error Closing the connection to Graphite server. Continuing.")
+		return
+	}
 
 	end := time.Now()
 	log.WithFields(log.Fields{
@@ -193,11 +194,12 @@ func (be *BurrowExporter) mainLoop(ctx context.Context) {
 	}
 }
 
-func MakeBurrowExporter(burrowUrl string, graphiteHost string, graphitePort int, interval int) *BurrowExporter {
+func MakeBurrowExporter(burrowUrl string, graphiteHost string, graphitePort int, interval int, prefix string) *BurrowExporter {
 	return &BurrowExporter{
-		client:            MakeBurrowClient(burrowUrl),
-		graphiteHost:      graphiteHost,
-		graphitePort:      graphitePort,
-		interval:          interval,
+		client:       MakeBurrowClient(burrowUrl),
+		graphiteHost: graphiteHost,
+		graphitePort: graphitePort,
+		interval:     interval,
+		prefix:       prefix,
 	}
 }

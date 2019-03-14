@@ -4,13 +4,14 @@ import (
 	"fmt"
 	"os"
 
-  log "github.com/Sirupsen/logrus"
+	log "github.com/Sirupsen/logrus"
 	"github.com/urfave/cli"
 
 	"context"
 	"os/signal"
 	"syscall"
-  "github.com/rgannu/burrow-graphite/burrow_graphite"
+
+	"github.com/rgannu/burrow-graphite/burrow_graphite"
 )
 
 var Version = "0.1"
@@ -20,6 +21,10 @@ func main() {
 	app.Version = Version
 	app.Name = "burrow-exporter"
 	app.Flags = []cli.Flag{
+		cli.StringFlag{
+			Name:  "prefix",
+			Usage: "metric prefix to use, default is empty string",
+		},
 		cli.StringFlag{
 			Name:  "burrow-addr",
 			Usage: "Address that burrow is listening on",
@@ -49,11 +54,11 @@ func main() {
 			os.Exit(1)
 		}
 
-    var graphitePort = 2003
+		var graphitePort = 2003
 		if !c.IsSet("graphite-port") {
 			fmt.Println("The graphite host is not set. Defaulting to 2003 (e.g. --graphite-port 2003)")
 		} else {
-		    graphitePort = c.Int("graphite-port")
+			graphitePort = c.Int("graphite-port")
 		}
 
 		if !c.IsSet("interval") {
@@ -67,7 +72,7 @@ func main() {
 
 		ctx, cancel := context.WithCancel(context.Background())
 
-		exporter := burrow_graphite.MakeBurrowExporter(c.String("burrow-addr"), c.String("graphite-host"), graphitePort, c.Int("interval"))
+		exporter := burrow_graphite.MakeBurrowExporter(c.String("burrow-addr"), c.String("graphite-host"), graphitePort, c.Int("interval"), c.String("prefix"))
 		go exporter.Start(ctx)
 
 		<-done

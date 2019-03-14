@@ -2,27 +2,30 @@ package burrow_graphite
 
 import (
 	"fmt"
+
+	log "github.com/Sirupsen/logrus"
 	"github.com/marpaia/graphite-golang"
 )
 
 func GetGraphiteConnection(graphiteHost string, graphitePort int) (*graphite.Graphite, error) {
 	gh, err := graphite.NewGraphite(graphiteHost, graphitePort)
-  if err != nil {
-    fmt.Println("Error in getting the Graphite connection", err)
-    return nil, err
-  }
-  return gh, nil
+	if err != nil {
+		fmt.Println("Error in getting the Graphite connection", err)
+		return nil, err
+	}
+	return gh, nil
 }
 
 func CloseGraphiteConnection(graphite *graphite.Graphite) error {
-  err := graphite.Disconnect()
-  if err != nil {
-    fmt.Println("Error in closing the Graphite connection", err)
-    return err
-  }
-  return nil
+	err := graphite.Disconnect()
+	if err != nil {
+		fmt.Println("Error in closing the Graphite connection", err)
+		return err
+	}
+	return nil
 }
 
-func SendMetrics(graphite *graphite.Graphite, metrics []Metric) error {
-  return graphite.sendMetrics(metrics)
+func SendMetrics(graphite *graphite.Graphite, metrics []graphite.Metric) error {
+	log.Debugf("sending %d metrics", len(metrics))
+	return graphite.SendMetrics(metrics)
 }

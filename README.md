@@ -5,6 +5,10 @@ from [burrow](https://github.com/linkedin/Burrow).
 
 The source code base is from prometheus [burrow-exporter](https://github.com/jirwin/burrow_exporter) and it has been adapted for graphite support.
 
+This is a fork of rgannu/burrow-graphite.  The reason I had to fork this:
+* There were some compilation issues
+* I needed a custom prefix support
+
 ## Run with Docker
 
 ### required environment variables
@@ -22,13 +26,13 @@ A scrape interval is required. Default: 30
 # with env variables
 docker run --add-host=dh:<burrow-ip> \
   -e BURROW_ADDR="http://dh:8000" \
-  -e GRAPHITE_HOST="<graphite-server-host>" \ 
+  -e GRAPHITE_HOST="<graphite-server-host>" \
   -e GRAPHITE_PORT="2003" \
   -e INTERVAL="30" \
   <image-id>
 
 # with custom command
-docker run --add-host=dh:<burrow-ip> \ 
+docker run --add-host=dh:<burrow-ip> \
   <image-id> ./burrow-graphite \
   --burrow-addr http://dh:8000 \
   --graphite-host <graphite-server-host> \
